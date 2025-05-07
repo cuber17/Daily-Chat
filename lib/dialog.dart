@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:llm_chat/storage_helper.dart';
+import 'package:llm_chat/api_service.dart'; // Import the new API service
 
 import 'dialog.dart' as _textController;
 import 'history.dart';
@@ -20,15 +21,14 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-
   final TextEditingController _textController = TextEditingController();
   List<ChatMessage> _messages = [];
   bool _isComposing = false;
   String _chatTitle = 'AI Assistant';
   late String _conversationId;
 
-
   late ChatScreenArguments _args;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -50,62 +50,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final messages = await StorageHelper.loadMessages(_conversationId);
     setState(() => _messages = messages.reversed.toList());
   }
-
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   // Add some initial messages for demo purposes
-  //   Future.delayed(Duration.zero, () {
-  //     final args = ModalRoute.of(context)!.settings.arguments as ChatScreenArguments?;
-  //     if (args != null) {
-  //       setState(() {
-  //         _chatTitle = args.title;
-  //       });
-  //
-  //       // Add initial messages based on the conversation topic
-  //       if (args.title == "Project Planning") {
-  //         _messages.add(ChatMessage(
-  //           text: "Hi, I'd like to discuss our project timeline.",
-  //           isUser: true,
-  //         ));
-  //         _messages.add(ChatMessage(
-  //           text: "Of course! What aspects of the timeline would you like to focus on?",
-  //           isUser: false,
-  //         ));
-  //         _messages.add(ChatMessage(
-  //           text: "Let's discuss the timeline for the next sprint",
-  //           isUser: true,
-  //         ));
-  //       } else if (args.title == "Code Review Help") {
-  //         _messages.add(ChatMessage(
-  //           text: "I'm having trouble understanding this algorithm.",
-  //           isUser: true,
-  //         ));
-  //         _messages.add(ChatMessage(
-  //           text: "I'd be happy to help. Which part is confusing you?",
-  //           isUser: false,
-  //         ));
-  //         _messages.add(ChatMessage(
-  //           text: "Can you explain how this algorithm works?",
-  //           isUser: true,
-  //         ));
-  //       } else if (args.title == "Learning Flutter") {
-  //         _messages.add(ChatMessage(
-  //           text: "I'm new to Flutter and need some guidance.",
-  //           isUser: true,
-  //         ));
-  //         _messages.add(ChatMessage(
-  //           text: "Flutter is a great framework! What would you like to know?",
-  //           isUser: false,
-  //         ));
-  //         _messages.add(ChatMessage(
-  //           text: "What are the best practices for state management?",
-  //           isUser: true,
-  //         ));
-  //       }
-  //     }
-  //   });
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -132,9 +76,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           Divider(height: 1.0),
           Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-            ),
+            decoration: BoxDecoration(color: Theme.of(context).cardColor),
             child: _buildTextComposer(),
           ),
         ],
@@ -167,9 +109,10 @@ class _ChatScreenState extends State<ChatScreen> {
               margin: EdgeInsets.symmetric(horizontal: 4.0),
               child: IconButton(
                 icon: Icon(Icons.send),
-                onPressed: _isComposing
-                    ? () => _handleSubmitted(_textController.text)
-                    : null,
+                onPressed:
+                    _isComposing
+                        ? () => _handleSubmitted(_textController.text)
+                        : null,
               ),
             ),
           ],
@@ -193,73 +136,84 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _isComposing = false;
     });
-    // 模拟AI回复
-    Future.delayed(Duration(milliseconds: 800), () {
-      final aiMsg = ChatMessage(text: generateAIResponse(text), isUser: false);
-      setState(() {
-        _messages.insert(0, aiMsg);
-      });
-      _updateLastMessage(aiMsg.text);
-      _saveMessages();
-    });
 
-    await _saveMessages();
-  }
-
-  void _simulateAIResponse(String userMessage) {
-    String aiResponse = generateAIResponse(userMessage);
+    // 显示加载状态
     setState(() {
-      _messages.insert(
-        0,
-        ChatMessage(
-          text: aiResponse,
-          isUser: false,
-        ),
-      );
+      _messages.insert(0, ChatMessage(text: "Thinking...", isUser: false));
     });
-  }
 
-  String generateAIResponse(String userMessage) {
-    // This is a very simple response generator
-    // In a real app, you would connect to an AI API
-    if (userMessage.toLowerCase().contains('hello') ||
-        userMessage.toLowerCase().contains('hi')) {
-      return 'Hello! How can I assist you today?';
-    } else if (userMessage.toLowerCase().contains('how are you')) {
-      return 'I\'m just a program, but I\'m functioning well! How can I help you?';
-    } else if (userMessage.toLowerCase().contains('thank')) {
-      return 'You\'re welcome! Is there anything else you\'d like to know?';
-    } else if (userMessage.contains('?')) {
-      return 'That\'s an interesting question. In a full implementation, I would connect to an AI service to provide a detailed answer.';
-    } else {
-      return 'I understand you said: "$userMessage". How can I help you with that?';
+    // 从API获取回复
+    try {
+      // 构建API需要的消息历史
+      final apiMessages = _buildApiMessages();
+      final aiResponse = await ZhipuAIService.generateResponse(apiMessages);
+
+      // 移除加载消息
+      setState(() {
+        _messages.removeAt(0);
+        // 添加真实回复
+        _messages.insert(0, ChatMessage(text: aiResponse, isUser: false));
+      });
+
+      _updateLastMessage(aiResponse);
+      await _saveMessages();
+    } catch (e) {
+      // 发生错误时处理
+      setState(() {
+        _messages.removeAt(0);
+        _messages.insert(
+          0,
+          ChatMessage(
+            text: "Sorry, I encountered an error. Please try again.",
+            isUser: false,
+          ),
+        );
+      });
+      print('Error getting AI response: $e');
     }
   }
 
-// 更新对话标题[9,11](@ref)
-void _updateConversationTitle(String firstMessage) {
-  final newTitle = firstMessage.length > 20
-      ? '${firstMessage.substring(0, 20)}...'
-      : firstMessage;
-  final updated = ConversationItem(
-    id: _conversationId,
-    title: newTitle,
-    lastMessage: firstMessage,
-    timestamp: DateTime.now().toString(),
-  );
-  _updateConversationList(updated);
-}
+  // 构建API需要的消息格式
+  List<Map<String, String>> _buildApiMessages() {
+    // 对消息历史进行反转，因为当前显示顺序是最新的在最前面
+    final historyMessages = _messages.reversed.toList();
 
-// 更新最后消息
-void _updateLastMessage(String message) {
-  final updated = ConversationItem(
-    id: _conversationId,
-    title: _messages.isNotEmpty ? _messages.last.text : '',
-    lastMessage: message,
-    timestamp: DateTime.now().toString(),
-  );
-  _updateConversationList(updated);
-}
+    // 转换为API格式
+    return historyMessages
+        .map(
+          (msg) => {
+            'role': msg.isUser ? 'user' : 'assistant',
+            'content': msg.text,
+          },
+        )
+        .toList();
+  }
+
+  // 更新对话标题[9,11](@ref)
+  void _updateConversationTitle(String firstMessage) {
+    final newTitle =
+        firstMessage.length > 20
+            ? '${firstMessage.substring(0, 20)}...'
+            : firstMessage;
+    final updated = ConversationItem(
+      id: _conversationId,
+      title: newTitle,
+      lastMessage: firstMessage,
+      timestamp: DateTime.now().toString(),
+    );
+    _updateConversationList(updated);
+  }
+
+  // 更新最后消息
+  void _updateLastMessage(String message) {
+    final updated = ConversationItem(
+      id: _conversationId,
+      title: _messages.isNotEmpty ? _messages.last.text : '',
+      lastMessage: message,
+      timestamp: DateTime.now().toString(),
+    );
+    _updateConversationList(updated);
+  }
 
   Future<void> _updateConversationList(ConversationItem item) async {
     final list = await StorageHelper.loadConversations();
@@ -269,7 +223,10 @@ void _updateLastMessage(String message) {
   }
 
   Future<void> _saveMessages() async {
-    await StorageHelper.saveMessages(_conversationId, _messages.reversed.toList());
+    await StorageHelper.saveMessages(
+      _conversationId,
+      _messages.reversed.toList(),
+    );
   }
 
   @override
@@ -282,6 +239,7 @@ void _updateLastMessage(String message) {
 class ChatMessage extends StatelessWidget {
   final String text;
   final bool isUser;
+
   //final DateTime timestamp; // 示例字段
 
   ChatMessage({
@@ -313,23 +271,21 @@ class ChatMessage extends StatelessWidget {
         children: [
           !isUser
               ? Container(
-            margin: EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(
-              backgroundColor: Colors.blue,
-              child: Text('AI', style: TextStyle(color: Colors.white)),
-            ),
-          )
+                margin: EdgeInsets.only(right: 16.0),
+                child: CircleAvatar(
+                  backgroundColor: Colors.blue,
+                  child: Text('AI', style: TextStyle(color: Colors.white)),
+                ),
+              )
               : Container(),
           Expanded(
             child: Column(
               crossAxisAlignment:
-              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 Text(
                   isUser ? 'You' : 'AI Assistant',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Container(
                   margin: EdgeInsets.only(top: 5.0),
@@ -345,12 +301,12 @@ class ChatMessage extends StatelessWidget {
           ),
           isUser
               ? Container(
-            margin: EdgeInsets.only(left: 16.0),
-            child: CircleAvatar(
-              backgroundColor: Colors.blue[300],
-              child: Text('You', style: TextStyle(color: Colors.white)),
-            ),
-          )
+                margin: EdgeInsets.only(left: 16.0),
+                child: CircleAvatar(
+                  backgroundColor: Colors.blue[300],
+                  child: Text('You', style: TextStyle(color: Colors.white)),
+                ),
+              )
               : Container(),
         ],
       ),
