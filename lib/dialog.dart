@@ -32,7 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // ✅ 正确位置：在上下文依赖关系建立后获取参数
+    // 正确位置：在上下文依赖关系建立后获取参数
     _args = ModalRoute.of(context)!.settings.arguments as ChatScreenArguments;
     _conversationId = _args.conversationId;
     _loadMessages();
