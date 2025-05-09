@@ -41,9 +41,6 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // final args = ModalRoute.of(context)!.settings.arguments as ChatScreenArguments;
-    // _conversationId = args.conversationId;
-    // _loadMessages();
   }
 
   Future<void> _loadMessages() async {
@@ -199,7 +196,7 @@ class _ChatScreenState extends State<ChatScreen> {
       id: _conversationId,
       title: newTitle,
       lastMessage: firstMessage,
-      timestamp: DateTime.now().toString(),
+      timestamp: DateTime.now().toString().split('.')[0],
     );
     _updateConversationList(updated);
   }
@@ -210,7 +207,7 @@ class _ChatScreenState extends State<ChatScreen> {
       id: _conversationId,
       title: _messages.isNotEmpty ? _messages.last.text : '',
       lastMessage: message,
-      timestamp: DateTime.now().toString(),
+      timestamp: DateTime.now().toString().split('.')[0],
     );
     _updateConversationList(updated);
   }
@@ -240,26 +237,23 @@ class ChatMessage extends StatelessWidget {
   final String text;
   final bool isUser;
 
-  //final DateTime timestamp; // 示例字段
 
   ChatMessage({
     required this.text,
     required this.isUser,
-    //this.timestamp = DateTime.now(),
+
   });
 
   // 手动实现 toJson
   Map<String, dynamic> toJson() => {
     'text': text,
     'isUser': isUser,
-    //'timestamp': timestamp.toIso8601String(), // 处理 DateTime 类型[5](@ref)
   };
 
   // 手动实现 fromJson
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
     text: json['text'] as String,
     isUser: json['isUser'] as bool,
-    //timestamp: DateTime.parse(json['timestamp'] as String),
   );
 
   @override

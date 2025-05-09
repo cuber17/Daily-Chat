@@ -30,7 +30,7 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
       id: DateTime.now().toIso8601String(),
       title: 'New Conversation',
       lastMessage: '',
-      timestamp: DateTime.now().toString(),
+      timestamp: DateTime.now().toString().split('.')[0],
     );
     _conversations.insert(0, newConversation);
     await StorageHelper.saveConversations(_conversations);
