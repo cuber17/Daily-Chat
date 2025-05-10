@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:llm_chat/storage_helper.dart';
 import 'package:llm_chat/api_service.dart'; // Import the new API service
 
@@ -118,60 +119,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // 发送消息（动态更新标题）
-  // void _handleSubmitted(String text) async {
-  //   print('_handleSubmitted is called');
-  //   if (_messages.isEmpty) {
-  //     _updateConversationTitle(text); // 第一条消息更新标题
-  //   }
-  //
-  //   // 添加用户消息
-  //   _messages.insert(0, ChatMessage(text: text, isUser: true));
-  //   _updateLastMessage(text);
-  //
-  //   _textController.clear();
-  //   setState(() {
-  //     _isComposing = false;
-  //   });
-  //
-  //   // 显示加载状态
-  //   setState(() {
-  //     _messages.insert(0, ChatMessage(text: "Thinking...", isUser: false));
-  //   });
-  //
-  //   // 从API获取回复
-  //   try {
-  //     // 构建API需要的消息历史
-  //     final apiMessages = _buildApiMessages();
-  //     final aiResponse = await ZhipuAIService.generateResponse(apiMessages);
-  //
-  //     // 移除加载消息
-  //     setState(() {
-  //       _messages.removeAt(0);
-  //       // 添加真实回复
-  //       _messages.insert(0, ChatMessage(text: aiResponse, isUser: false));
-  //     });
-  //
-  //     _updateLastMessage(aiResponse);
-  //     await _saveMessages();
-  //   } catch (e) {
-  //     // 发生错误时处理
-  //     setState(() {
-  //       _messages.removeAt(0);
-  //       _messages.insert(
-  //         0,
-  //         ChatMessage(
-  //           text: "Sorry, I encountered an error. Please try again.",
-  //           isUser: false,
-  //         ),
-  //       );
-  //     });
-  //     print('Error getting AI response: $e');
-  //   }
-  // }
-
   void _handleSubmitted(String text) async {
-    print('_handleSubmitted is called');
+    // print('_handleSubmitted is called');
     if (_messages.isEmpty) {
       _updateConversationTitle(text); // 第一条消息更新标题
     }
@@ -225,7 +174,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
       });
-      print('Error getting AI response: $e');
+      // print('Error getting AI response: $e');
     }
   }
 
@@ -347,7 +296,10 @@ class ChatMessage extends StatelessWidget {
                     color: isUser ? Colors.blue[100] : Colors.grey[200],
                     borderRadius: BorderRadius.circular(12.0),
                   ),
-                  child: Text(text),
+                  child: MarkdownBody(
+                    data: text,
+                    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)),
+                  ),
                 ),
               ],
             ),
