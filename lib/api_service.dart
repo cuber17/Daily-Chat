@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ZhipuAIService {
@@ -41,6 +42,51 @@ class ZhipuAIService {
       // Handle exceptions
       // print('Exception when calling API: $e');
       return 'Sorry, I encountered a connection error. Please check your internet connection and try again.';
+    }
+  }
+
+  static Stream<String> generateResponseStream(List<Map<String, String>> messages) async* {
+    try {
+      final request = http.Request('POST', Uri.parse(apiUrl));
+
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey',
+      });
+
+      request.body = jsonEncode({
+        'model': 'glm-4-plus',
+        'messages': messages,
+        'stream': true, // 启用流式传输
+      });
+
+      final response = await http.Client().send(request);
+
+      if (response.statusCode == 200) {
+        await for (var chunk in response.stream.transform(utf8.decoder)) {
+          // 处理SSE格式数据
+          for (var line in chunk.split('\n')) {
+            if (line.startsWith('data: ')) {
+              var data = line.substring(6);
+              if (data.trim() == '[DONE]') continue;
+
+              try {
+                var jsonData = jsonDecode(data);
+                var content = jsonData['choices'][0]['delta']['content'];
+                if (content != null) {
+                  yield content;
+                }
+              } catch (e) {
+                print('Error parsing JSON: $e');
+              }
+            }
+          }
+        }
+      } else {
+        yield 'Error: ${response.statusCode}';
+      }
+    } catch (e) {
+      yield 'Connection error: $e';
     }
   }
 }

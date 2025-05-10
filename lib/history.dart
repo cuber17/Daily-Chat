@@ -43,7 +43,7 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Conversation History')),
+      appBar: AppBar(title: Text('对话历史')),
       body: ListView.builder(
         itemCount: _conversations.length,
         itemBuilder: (context, index) => ConversationListItem(

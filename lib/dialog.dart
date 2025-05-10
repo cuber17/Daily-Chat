@@ -24,7 +24,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   List<ChatMessage> _messages = [];
   bool _isComposing = false;
-  String _chatTitle = 'AI Assistant';
+  String _chatTitle = 'AI对话';
   late String _conversationId;
 
   late ChatScreenArguments _args;
@@ -119,6 +119,57 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // 发送消息（动态更新标题）
+  // void _handleSubmitted(String text) async {
+  //   print('_handleSubmitted is called');
+  //   if (_messages.isEmpty) {
+  //     _updateConversationTitle(text); // 第一条消息更新标题
+  //   }
+  //
+  //   // 添加用户消息
+  //   _messages.insert(0, ChatMessage(text: text, isUser: true));
+  //   _updateLastMessage(text);
+  //
+  //   _textController.clear();
+  //   setState(() {
+  //     _isComposing = false;
+  //   });
+  //
+  //   // 显示加载状态
+  //   setState(() {
+  //     _messages.insert(0, ChatMessage(text: "Thinking...", isUser: false));
+  //   });
+  //
+  //   // 从API获取回复
+  //   try {
+  //     // 构建API需要的消息历史
+  //     final apiMessages = _buildApiMessages();
+  //     final aiResponse = await ZhipuAIService.generateResponse(apiMessages);
+  //
+  //     // 移除加载消息
+  //     setState(() {
+  //       _messages.removeAt(0);
+  //       // 添加真实回复
+  //       _messages.insert(0, ChatMessage(text: aiResponse, isUser: false));
+  //     });
+  //
+  //     _updateLastMessage(aiResponse);
+  //     await _saveMessages();
+  //   } catch (e) {
+  //     // 发生错误时处理
+  //     setState(() {
+  //       _messages.removeAt(0);
+  //       _messages.insert(
+  //         0,
+  //         ChatMessage(
+  //           text: "Sorry, I encountered an error. Please try again.",
+  //           isUser: false,
+  //         ),
+  //       );
+  //     });
+  //     print('Error getting AI response: $e');
+  //   }
+  // }
+
   void _handleSubmitted(String text) async {
     print('_handleSubmitted is called');
     if (_messages.isEmpty) {
@@ -136,23 +187,31 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // 显示加载状态
     setState(() {
-      _messages.insert(0, ChatMessage(text: "Thinking...", isUser: false));
+      _messages.insert(0, ChatMessage(text: "思考中", isUser: false));
     });
 
-    // 从API获取回复
+    // 从API获取流式回复
     try {
-      // 构建API需要的消息历史
       final apiMessages = _buildApiMessages();
-      final aiResponse = await ZhipuAIService.generateResponse(apiMessages);
+      final responseStream = ZhipuAIService.generateResponseStream(apiMessages);
 
-      // 移除加载消息
-      setState(() {
-        _messages.removeAt(0);
-        // 添加真实回复
-        _messages.insert(0, ChatMessage(text: aiResponse, isUser: false));
-      });
+      // 创建一个新的消息条目，用于显示流式回复
+      final aiMessageIndex = 0; // 假设流式回复总是插入到列表顶部
+      String currentResponse = '';
 
-      _updateLastMessage(aiResponse);
+      await for (final String chunk in responseStream) {
+        // 移除加载消息并逐步显示流式回复
+        setState(() {
+          _messages.removeAt(aiMessageIndex);
+          currentResponse += chunk;
+          _messages.insert(aiMessageIndex, ChatMessage(text: currentResponse, isUser: false));
+        });
+
+        // 添加小延迟，避免 UI 更新过于频繁
+        await Future.delayed(Duration(milliseconds: 50));
+      }
+
+      _updateLastMessage(currentResponse);
       await _saveMessages();
     } catch (e) {
       // 发生错误时处理
