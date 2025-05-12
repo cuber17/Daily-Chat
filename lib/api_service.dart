@@ -14,8 +14,8 @@ class ZhipuAIService {
     };
   }
 
-  // Call the Zhipu AI API
-  static Future<String> generateResponse(List<Map<String, String>> messages) async {
+  // Call the Zhipu AI API with model parameter
+  static Future<String> generateResponse(List<Map<String, String>> messages, [String model = 'glm-4-plus']) async {
     try {
       final response = await http.post(
         Uri.parse(apiUrl),
@@ -24,7 +24,7 @@ class ZhipuAIService {
           'Authorization': 'Bearer $apiKey',
         },
         body: jsonEncode({
-          'model': 'glm-4-plus',
+          'model': model, // 使用传入的模型
           'messages': messages,
         }),
       );
@@ -45,7 +45,8 @@ class ZhipuAIService {
     }
   }
 
-  static Stream<String> generateResponseStream(List<Map<String, String>> messages) async* {
+  // 流式回复API添加模型参数
+  static Stream<String> generateResponseStream(List<Map<String, String>> messages, [String model = 'glm-4-plus']) async* {
     try {
       final request = http.Request('POST', Uri.parse(apiUrl));
 
@@ -55,7 +56,7 @@ class ZhipuAIService {
       });
 
       request.body = jsonEncode({
-        'model': 'glm-4-plus',
+        'model': model, // 使用传入的模型
         'messages': messages,
         'stream': true, // 启用流式传输
       });

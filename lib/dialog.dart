@@ -28,6 +28,10 @@ class _ChatScreenState extends State<ChatScreen> {
   String _chatTitle = 'AI对话';
   late String _conversationId;
 
+  // 添加模型选择变量
+  String _selectedModel = 'glm-4-plus'; // 默认模型
+  final List<String> _availableModels = ['glm-4-plus', 'glm-4-long', 'glm-4-flashx'];
+
   late ChatScreenArguments _args;
 
   @override
@@ -61,6 +65,31 @@ class _ChatScreenState extends State<ChatScreen> {
             Navigator.pop(context);
           },
         ),
+        // 添加模型选择下拉框到AppBar的actions中
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: DropdownButton<String>(
+              value: _selectedModel,
+              icon: const Icon(Icons.settings),
+              underline: Container(), // 移除下划线
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _selectedModel = newValue;
+                  });
+                }
+              },
+              items: _availableModels
+                  .map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value, style: TextStyle(fontSize: 14)),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -108,9 +137,9 @@ class _ChatScreenState extends State<ChatScreen> {
               child: IconButton(
                 icon: Icon(Icons.send),
                 onPressed:
-                    _isComposing
-                        ? () => _handleSubmitted(_textController.text)
-                        : null,
+                _isComposing
+                    ? () => _handleSubmitted(_textController.text)
+                    : null,
               ),
             ),
           ],
@@ -142,7 +171,8 @@ class _ChatScreenState extends State<ChatScreen> {
     // 从API获取流式回复
     try {
       final apiMessages = _buildApiMessages();
-      final responseStream = ZhipuAIService.generateResponseStream(apiMessages);
+      // 传递当前选择的模型
+      final responseStream = ZhipuAIService.generateResponseStream(apiMessages, _selectedModel);
 
       // 创建一个新的消息条目，用于显示流式回复
       final aiMessageIndex = 0; // 假设流式回复总是插入到列表顶部
@@ -187,19 +217,19 @@ class _ChatScreenState extends State<ChatScreen> {
     return historyMessages
         .map(
           (msg) => {
-            'role': msg.isUser ? 'user' : 'assistant',
-            'content': msg.text,
-          },
-        )
+        'role': msg.isUser ? 'user' : 'assistant',
+        'content': msg.text,
+      },
+    )
         .toList();
   }
 
   // 更新对话标题[9,11](@ref)
   void _updateConversationTitle(String firstMessage) {
     final newTitle =
-        firstMessage.length > 20
-            ? '${firstMessage.substring(0, 20)}...'
-            : firstMessage;
+    firstMessage.length > 20
+        ? '${firstMessage.substring(0, 20)}...'
+        : firstMessage;
     final updated = ConversationItem(
       id: _conversationId,
       title: newTitle,
@@ -273,17 +303,17 @@ class ChatMessage extends StatelessWidget {
         children: [
           !isUser
               ? Container(
-                margin: EdgeInsets.only(right: 16.0),
-                child: CircleAvatar(
-                  backgroundColor: Colors.blue,
-                  child: Text('AI', style: TextStyle(color: Colors.white)),
-                ),
-              )
+            margin: EdgeInsets.only(right: 16.0),
+            child: CircleAvatar(
+              backgroundColor: Colors.blue,
+              child: Text('AI', style: TextStyle(color: Colors.white)),
+            ),
+          )
               : Container(),
           Expanded(
             child: Column(
               crossAxisAlignment:
-                  isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 Text(
                   isUser ? 'You' : 'AI Assistant',
@@ -306,12 +336,12 @@ class ChatMessage extends StatelessWidget {
           ),
           isUser
               ? Container(
-                margin: EdgeInsets.only(left: 16.0),
-                child: CircleAvatar(
-                  backgroundColor: Colors.blue[300],
-                  child: Text('You', style: TextStyle(color: Colors.white)),
-                ),
-              )
+            margin: EdgeInsets.only(left: 16.0),
+            child: CircleAvatar(
+              backgroundColor: Colors.blue[300],
+              child: Text('You', style: TextStyle(color: Colors.white)),
+            ),
+          )
               : Container(),
         ],
       ),
