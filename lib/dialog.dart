@@ -28,9 +28,15 @@ class _ChatScreenState extends State<ChatScreen> {
   String _chatTitle = 'AI对话';
   late String _conversationId;
 
-  // 添加模型选择变量
+  // 更新模型选择变量，添加DeepSeek模型
   String _selectedModel = 'glm-4-plus'; // 默认模型
-  final List<String> _availableModels = ['glm-4-plus', 'glm-4-long', 'glm-4-flashx'];
+  final List<String> _availableModels = [
+    'glm-4-plus',
+    'glm-4-long',
+    'glm-4-flashx',
+    'deepseek-r1',
+    'deepseek-v3'
+  ];
 
   late ChatScreenArguments _args;
 
@@ -53,6 +59,11 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _messages = messages.reversed.toList());
   }
 
+  // 判断所选模型是否为DeepSeek模型
+  bool _isDeepSeekModel(String model) {
+    return model.startsWith('deepseek');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -65,7 +76,7 @@ class _ChatScreenState extends State<ChatScreen> {
             Navigator.pop(context);
           },
         ),
-        // 添加模型选择下拉框到AppBar的actions中
+        // 模型选择下拉框
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
@@ -93,6 +104,17 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
+          // 显示当前使用的API提供商
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 4.0),
+            color: Colors.grey[200],
+            child: Center(
+              child: Text(
+                _isDeepSeekModel(_selectedModel) ? 'DeepSeek API' : 'Zhipu AI API',
+                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              ),
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               padding: EdgeInsets.all(8.0),
@@ -149,7 +171,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleSubmitted(String text) async {
-    // print('_handleSubmitted is called');
     if (_messages.isEmpty) {
       _updateConversationTitle(text); // 第一条消息更新标题
     }
@@ -171,11 +192,19 @@ class _ChatScreenState extends State<ChatScreen> {
     // 从API获取流式回复
     try {
       final apiMessages = _buildApiMessages();
-      // 传递当前选择的模型
-      final responseStream = ZhipuAIService.generateResponseStream(apiMessages, _selectedModel);
+      Stream<String> responseStream;
+
+      // 根据选择的模型决定使用哪个API
+      if (_isDeepSeekModel(_selectedModel)) {
+        // 使用DeepSeek API
+        responseStream = AIService.generateDeepSeekResponseStream(apiMessages, _selectedModel);
+      } else {
+        // 使用Zhipu AI API
+        responseStream = AIService.generateZhipuResponseStream(apiMessages, _selectedModel);
+      }
 
       // 创建一个新的消息条目，用于显示流式回复
-      final aiMessageIndex = 0; // 假设流式回复总是插入到列表顶部
+      final aiMessageIndex = 0;
       String currentResponse = '';
 
       await for (final String chunk in responseStream) {
@@ -224,7 +253,7 @@ class _ChatScreenState extends State<ChatScreen> {
         .toList();
   }
 
-  // 更新对话标题[9,11](@ref)
+  // 更新对话标题
   void _updateConversationTitle(String firstMessage) {
     final newTitle =
     firstMessage.length > 20
@@ -275,11 +304,9 @@ class ChatMessage extends StatelessWidget {
   final String text;
   final bool isUser;
 
-
   ChatMessage({
     required this.text,
     required this.isUser,
-
   });
 
   // 手动实现 toJson

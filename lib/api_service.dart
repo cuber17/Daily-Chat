@@ -2,63 +2,43 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
-class ZhipuAIService {
-  static const String apiUrl = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-  static const String apiKey = 'bc0f1f6ae22541558c5df849d128aaaf.RRJMNWUlzYbUEBFO';
+class AIService {
+  // Zhipu AI API配置
+  static const String zhipuApiUrl = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+  static const String zhipuApiKey = 'bc0f1f6ae22541558c5df849d128aaaf.RRJMNWUlzYbUEBFO';
 
-  // Convert our ChatMessage to the API's message format
-  static Map<String, String> _formatMessage(String content, bool isUser) {
-    return {
-      'role': isUser ? 'user' : 'assistant',
-      'content': content,
-    };
-  }
+  // DeepSeek API配置
+  static const String deepseekApiUrl = 'https://api.deepseek.com/chat/completions';
+  static const String deepseekApiKey = 'sk-b3493c79407d48c58455eaef4a4f6673';
 
-  // Call the Zhipu AI API with model parameter
-  static Future<String> generateResponse(List<Map<String, String>> messages, [String model = 'glm-4-plus']) async {
-    try {
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: jsonEncode({
-          'model': model, // 使用传入的模型
-          'messages': messages,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        final content = data['choices'][0]['message']['content'];
-        return content;
-      } else {
-        // Handle error response
-        // print('API Error: ${response.statusCode} - ${response.body}');
-        return 'Sorry, I encountered an error. Please try again later. (Error: ${response.statusCode})';
-      }
-    } catch (e) {
-      // Handle exceptions
-      // print('Exception when calling API: $e');
-      return 'Sorry, I encountered a connection error. Please check your internet connection and try again.';
+  // 映射DeepSeek模型名称
+  static String _mapDeepSeekModel(String model) {
+    switch (model) {
+      case 'deepseek-r1':
+        return 'deepseek-reasoner'; // 实际DeepSeek API中的模型名称
+      case 'deepseek-v3':
+        return 'deepseek-chat'; // 实际DeepSeek API中的模型名称
+      default:
+        return model;
     }
   }
 
-  // 流式回复API添加模型参数
-  static Stream<String> generateResponseStream(List<Map<String, String>> messages, [String model = 'glm-4-plus']) async* {
+  // ========== Zhipu AI 实现 ==========
+
+  // Zhipu AI 流式响应
+  static Stream<String> generateZhipuResponseStream(List<Map<String, String>> messages, [String model = 'glm-4-plus']) async* {
     try {
-      final request = http.Request('POST', Uri.parse(apiUrl));
+      final request = http.Request('POST', Uri.parse(zhipuApiUrl));
 
       request.headers.addAll({
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $apiKey',
+        'Authorization': 'Bearer $zhipuApiKey',
       });
 
       request.body = jsonEncode({
-        'model': model, // 使用传入的模型
+        'model': model,
         'messages': messages,
-        'stream': true, // 启用流式传输
+        'stream': true,
       });
 
       final response = await http.Client().send(request);
@@ -88,6 +68,60 @@ class ZhipuAIService {
       }
     } catch (e) {
       yield 'Connection error: $e';
+    }
+  }
+
+  // ========== DeepSeek API 实现 ==========
+
+  // DeepSeek 流式响应
+  static Stream<String> generateDeepSeekResponseStream(List<Map<String, String>> messages, [String model = 'deepseek-chat']) async* {
+    try {
+      final request = http.Request('POST', Uri.parse(deepseekApiUrl));
+
+      // DeepSeek API 使用Bearer Token认证
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $deepseekApiKey',
+      });
+
+      // 转换为DeepSeek API模型名称
+      final actualModel = _mapDeepSeekModel(model);
+
+      request.body = jsonEncode({
+        'model': actualModel,
+        'messages': messages,
+        'stream': true,
+      });
+
+      final response = await http.Client().send(request);
+
+      if (response.statusCode == 200) {
+        await for (var chunk in response.stream.transform(utf8.decoder)) {
+          // 处理DeepSeek SSE格式数据
+          for (var line in chunk.split('\n')) {
+            if (line.startsWith('data: ')) {
+              var data = line.substring(6);
+              if (data.trim() == '[DONE]') continue;
+
+              try {
+                var jsonData = jsonDecode(data);
+                // DeepSeek API 返回格式可能与智谱API不同，根据文档调整
+                var content = jsonData['choices'][0]['delta']['content'];
+                if (content != null) {
+                  yield content;
+                }
+              } catch (e) {
+                // print('Error parsing DeepSeek JSON: $e');
+              }
+            }
+          }
+        }
+      } else {
+        yield 'DeepSeek API Error: ${response.statusCode}';
+      }
+    } catch (e) {
+      yield 'DeepSeek connection error: $e}';
     }
   }
 }
