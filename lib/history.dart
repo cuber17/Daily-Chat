@@ -11,8 +11,6 @@ class ConversationHistoryScreen extends StatefulWidget {
 class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
   List<ConversationItem> _conversations = [];
 
-
-
   @override
   void initState() {
     super.initState();
@@ -40,6 +38,19 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
     )).then((_) => _loadConversations());
   }
 
+  // 删除对话
+  Future<void> _deleteConversation(String conversationId) async {
+    _conversations.removeWhere((item) => item.id == conversationId);
+    await StorageHelper.saveConversations(_conversations);
+    // 删除对话内容
+    await StorageHelper.loadMessages(conversationId).then((messages) async {
+      if (messages.isNotEmpty) {
+        await StorageHelper.saveMessages(conversationId, []);
+      }
+    });
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -56,11 +67,36 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
               title: _conversations[index].title,
             ),
           ).then((_) => _loadConversations()),
+          onLongPress: () => _showDeleteConfirmationDialog(_conversations[index].id),
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _createNewConversation,
         child: Icon(Icons.add),
+      ),
+    );
+  }
+
+  // 显示删除确认对话框
+  void _showDeleteConfirmationDialog(String conversationId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('删除对话'),
+        content: Text('确定要删除这条对话记录吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), // 取消
+            child: Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              _deleteConversation(conversationId);
+              Navigator.pop(context);
+            },
+            child: Text('确定', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
@@ -99,10 +135,12 @@ class ConversationItem {
 class ConversationListItem extends StatelessWidget {
   final ConversationItem conversation;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   ConversationListItem({
     required this.conversation,
     required this.onTap,
+    required this.onLongPress,
   });
 
   @override
@@ -142,6 +180,7 @@ class ConversationListItem extends StatelessWidget {
       ),
       contentPadding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       onTap: onTap,
+      onLongPress: onLongPress,
     );
   }
 }
