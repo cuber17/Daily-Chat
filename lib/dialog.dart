@@ -3,7 +3,6 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:llm_chat/storage_helper.dart';
 import 'package:llm_chat/api_service.dart'; // Import the new API service
 
-import 'dialog.dart' as _textController;
 import 'history.dart';
 
 class ChatScreenArguments {
@@ -62,6 +61,26 @@ class _ChatScreenState extends State<ChatScreen> {
   // 判断所选模型是否为DeepSeek模型
   bool _isDeepSeekModel(String model) {
     return model.startsWith('deepseek');
+  }
+
+  // 判断所选模型是否为DeepSeek Reasoner模型
+  bool _isDeepSeekReasonerModel(String model) {
+    return model == 'deepseek-r1';
+  }
+
+  // 切换思维链显示状态
+  void _toggleReasoningVisibility(int messageIndex) {
+    setState(() {
+      final message = _messages[messageIndex];
+      if (message is ChatMessage && message.reasoningContent != null) {
+        _messages[messageIndex] = ChatMessage(
+          text: message.text,
+          isUser: message.isUser,
+          reasoningContent: message.reasoningContent,
+          showReasoning: !(message.showReasoning),
+        );
+      }
+    });
   }
 
   @override
@@ -184,42 +203,22 @@ class _ChatScreenState extends State<ChatScreen> {
       _isComposing = false;
     });
 
-    // 显示加载状态
-    setState(() {
-      _messages.insert(0, ChatMessage(text: "思考中", isUser: false));
-    });
-
     // 从API获取流式回复
     try {
       final apiMessages = _buildApiMessages();
-      Stream<String> responseStream;
-
+      // 显示加载状态
+      setState(() {
+        _messages.insert(0, ChatMessage(text: "思考中", isUser: false));
+      });
       // 根据选择的模型决定使用哪个API
       if (_isDeepSeekModel(_selectedModel)) {
-        // 使用DeepSeek API
-        responseStream = AIService.generateDeepSeekResponseStream(apiMessages, _selectedModel);
+        // 处理DeepSeek模型响应
+        await _handleDeepSeekResponse(apiMessages);
       } else {
-        // 使用Zhipu AI API
-        responseStream = AIService.generateZhipuResponseStream(apiMessages, _selectedModel);
+        // 处理Zhipu AI模型响应
+        await _handleZhipuResponse(apiMessages);
       }
 
-      // 创建一个新的消息条目，用于显示流式回复
-      final aiMessageIndex = 0;
-      String currentResponse = '';
-
-      await for (final String chunk in responseStream) {
-        // 移除加载消息并逐步显示流式回复
-        setState(() {
-          _messages.removeAt(aiMessageIndex);
-          currentResponse += chunk;
-          _messages.insert(aiMessageIndex, ChatMessage(text: currentResponse, isUser: false));
-        });
-
-        // 添加小延迟，避免 UI 更新过于频繁
-        await Future.delayed(Duration(milliseconds: 50));
-      }
-
-      _updateLastMessage(currentResponse);
       await _saveMessages();
     } catch (e) {
       // 发生错误时处理
@@ -237,17 +236,138 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // 处理DeepSeek模型响应
+  Future<void> _handleDeepSeekResponse(List<Map<String, String>> apiMessages) async {
+    final aiMessageIndex = 0;
+
+    if (_isDeepSeekReasonerModel(_selectedModel)) {
+      // DeepSeek Reasoner模型需要特殊处理
+      String reasoningContent = '';
+      String finalContent = '';
+
+      // 将响应流转换为Map<String, dynamic>
+      final responseStream = AIService.generateDeepSeekResponseStream(apiMessages, _selectedModel);
+
+      await for (final chunk in responseStream) {
+        // 解析响应数据
+        if (chunk is Map<String, dynamic>) {
+          final String type = chunk['type'] as String;
+          final String content = chunk['content'] as String;
+
+          setState(() {
+            _messages.removeAt(aiMessageIndex);
+
+            if (type == 'reasoning') {
+              // 累积思维链内容
+              reasoningContent += content;
+              _messages.insert(
+                aiMessageIndex,
+                ChatMessage(
+                  text: "思考中...",
+                  isUser: false,
+                  reasoningContent: reasoningContent,
+                  showReasoning: true,
+                ),
+              );
+            } else if (type == 'final') {
+              // 累积最终回答
+              finalContent += content;
+              _messages.insert(
+                aiMessageIndex,
+                ChatMessage(
+                  text: finalContent,
+                  isUser: false,
+                  reasoningContent: reasoningContent,
+                  showReasoning: true,
+                ),
+              );
+            } else {
+              // 处理其他类型响应(如错误)
+              _messages.insert(
+                aiMessageIndex,
+                ChatMessage(
+                  text: content,
+                  isUser: false,
+                ),
+              );
+            }
+          });
+
+          // 添加小延迟，避免UI更新过于频繁
+          await Future.delayed(Duration(milliseconds: 50));
+        }
+      }
+
+      // 只保存最终回答到对话历史
+      if (finalContent.isNotEmpty) {
+        _updateLastMessage(finalContent);
+      }
+    } else {
+      // 常规DeepSeek模型
+      String currentResponse = '';
+
+      // 常规DeepSeek模型响应流仍然是String
+      final responseStream = AIService.generateDeepSeekResponseStream(apiMessages, _selectedModel);
+
+      await for (final chunk in responseStream) {
+        if (chunk is Map<String, dynamic> && chunk['type'] == 'regular') {
+          final content = chunk['content'] as String;
+
+          setState(() {
+            _messages.removeAt(aiMessageIndex);
+            currentResponse += content;
+            _messages.insert(
+              aiMessageIndex,
+              ChatMessage(
+                text: currentResponse,
+                isUser: false,
+              ),
+            );
+          });
+
+          // 添加小延迟，避免UI更新过于频繁
+          await Future.delayed(Duration(milliseconds: 50));
+        }
+      }
+
+      _updateLastMessage(currentResponse);
+    }
+  }
+
+  // 处理ZhipuAI模型响应
+  Future<void> _handleZhipuResponse(List<Map<String, String>> apiMessages) async {
+    final responseStream = AIService.generateZhipuResponseStream(apiMessages, _selectedModel);
+
+    // 创建一个新的消息条目，用于显示流式回复
+    final aiMessageIndex = 0;
+    String currentResponse = '';
+
+    await for (final String chunk in responseStream) {
+      // 移除加载消息并逐步显示流式回复
+      setState(() {
+        _messages.removeAt(aiMessageIndex);
+        currentResponse += chunk;
+        _messages.insert(aiMessageIndex, ChatMessage(text: currentResponse, isUser: false));
+      });
+
+      // 添加小延迟，避免 UI 更新过于频繁
+      await Future.delayed(Duration(milliseconds: 50));
+    }
+
+    _updateLastMessage(currentResponse);
+  }
+
   // 构建API需要的消息格式
   List<Map<String, String>> _buildApiMessages() {
     // 对消息历史进行反转，因为当前显示顺序是最新的在最前面
     final historyMessages = _messages.reversed.toList();
 
-    // 转换为API格式
+    // 转换为API格式，排除思维链内容
     return historyMessages
         .map(
           (msg) => {
         'role': msg.isUser ? 'user' : 'assistant',
-        'content': msg.text,
+        'content': msg.text, // 只包含最终回答内容，不包含思维链
       },
     )
         .toList();
@@ -303,22 +423,29 @@ class _ChatScreenState extends State<ChatScreen> {
 class ChatMessage extends StatelessWidget {
   final String text;
   final bool isUser;
+  final String? reasoningContent; // 新增思维链内容字段
+  final bool showReasoning; // 是否显示思维链内容
 
   ChatMessage({
     required this.text,
     required this.isUser,
+    this.reasoningContent,
+    this.showReasoning = false,
   });
 
-  // 手动实现 toJson
+  // 手动实现 toJson - 只保存必要内容，不包含UI状态
   Map<String, dynamic> toJson() => {
     'text': text,
     'isUser': isUser,
+    'reasoningContent': reasoningContent,
   };
 
   // 手动实现 fromJson
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
     text: json['text'] as String,
     isUser: json['isUser'] as bool,
+    reasoningContent: json['reasoningContent'] as String?,
+    showReasoning: true, // 默认显示思维链
   );
 
   @override
@@ -346,6 +473,7 @@ class ChatMessage extends StatelessWidget {
                   isUser ? 'You' : 'AI Assistant',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
+                // 主要内容
                 Container(
                   margin: EdgeInsets.only(top: 5.0),
                   padding: EdgeInsets.all(10.0),
@@ -358,6 +486,67 @@ class ChatMessage extends StatelessWidget {
                     styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)),
                   ),
                 ),
+                // 思维链内容（如果有且显示状态为true）
+                if (reasoningContent != null && reasoningContent!.isNotEmpty && showReasoning)
+                  Container(
+                    margin: EdgeInsets.only(top: 8.0),
+                    padding: EdgeInsets.all(10.0),
+                    decoration: BoxDecoration(
+                      color: Colors.amber[50],
+                      borderRadius: BorderRadius.circular(12.0),
+                      border: Border.all(color: Colors.amber.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.psychology, size: 16, color: Colors.amber[700]),
+                            SizedBox(width: 4),
+                            Text(
+                              '思维链',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Colors.amber[900],
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 5),
+                        MarkdownBody(
+                          data: reasoningContent!,
+                          styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)),
+                        ),
+                      ],
+                    ),
+                  ),
+                // 当有思维链但未显示时，添加一个展开/收起按钮
+                if (reasoningContent != null && reasoningContent!.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () {
+                      // 查找当前消息在列表中的索引
+                      final chatScreen = context.findAncestorStateOfType<_ChatScreenState>();
+                      if (chatScreen != null) {
+                        final index = chatScreen._messages.indexOf(this);
+                        if (index != -1) {
+                          chatScreen._toggleReasoningVisibility(index);
+                        }
+                      }
+                    },
+                    icon: Icon(
+                      showReasoning ? Icons.visibility_off : Icons.visibility,
+                      size: 16,
+                    ),
+                    label: Text(
+                      showReasoning ? '隐藏思维链' : '显示思维链',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      minimumSize: Size(0, 0),
+                    ),
+                  ),
               ],
             ),
           ),

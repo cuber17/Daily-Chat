@@ -65,7 +65,7 @@ class AIService {
           }
         }
       } else {
-        yield 'Error: ${response.statusCode}';
+        yield 'Error: ${response}';
       }
     } catch (e) {
       yield 'Connection error: $e';
@@ -74,15 +74,15 @@ class AIService {
 
   // ========== DeepSeek API 实现 ==========
 
-  // DeepSeek 流式响应
-  static Stream<String> generateDeepSeekResponseStream(List<Map<String, String>> messages, [String model = 'deepseek-chat']) async* {
+  // DeepSeek 流式响应（带有响应类型标识）
+  static Stream<Map<String, dynamic>> generateDeepSeekResponseStream(
+      List<Map<String, String>> messages, [String model = 'deepseek-chat']) async* {
     try {
       final request = http.Request('POST', Uri.parse(deepseekApiUrl));
 
       // DeepSeek API 使用Bearer Token认证
       request.headers.addAll({
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
         'Authorization': 'Bearer $deepseekApiKey',
       });
 
@@ -98,6 +98,9 @@ class AIService {
       final response = await http.Client().send(request);
 
       if (response.statusCode == 200) {
+        String reasoningContent = '';
+        String finalContent = '';
+
         await for (var chunk in response.stream.transform(utf8.decoder)) {
           // 处理DeepSeek SSE格式数据
           for (var line in chunk.split('\n')) {
@@ -107,10 +110,35 @@ class AIService {
 
               try {
                 var jsonData = jsonDecode(data);
-                // DeepSeek API 返回格式可能与智谱API不同，根据文档调整
-                var content = jsonData['choices'][0]['delta']['content'];
-                if (content != null) {
-                  yield content;
+
+                // 处理DeepSeek Reasoner模型的特殊结构
+                if (model == 'deepseek-r1') {
+                  // 检查是否有思维链内容
+                  if (jsonData['choices'][0]['delta']['reasoning_content'] != null) {
+                    reasoningContent += jsonData['choices'][0]['delta']['reasoning_content'];
+                    yield {
+                      'type': 'reasoning',
+                      'content': jsonData['choices'][0]['delta']['reasoning_content']
+                    };
+                  }
+
+                  // 检查是否有最终答案内容
+                  if (jsonData['choices'][0]['delta']['content'] != null) {
+                    finalContent += jsonData['choices'][0]['delta']['content'];
+                    yield {
+                      'type': 'final',
+                      'content': jsonData['choices'][0]['delta']['content']
+                    };
+                  }
+                } else {
+                  // 常规DeepSeek模型处理
+                  var content = jsonData['choices'][0]['delta']['content'];
+                  if (content != null) {
+                    yield {
+                      'type': 'regular',
+                      'content': content
+                    };
+                  }
                 }
               } catch (e) {
                 // print('Error parsing DeepSeek JSON: $e');
@@ -119,10 +147,17 @@ class AIService {
           }
         }
       } else {
-        yield 'DeepSeek API Error: ${response.statusCode}';
+        final errorBody = await response.stream.bytesToString();
+        yield {
+          'type': 'error',
+          'content': 'DeepSeek API Error (${response.statusCode}): $errorBody'
+        };
       }
     } catch (e) {
-      yield 'DeepSeek connection error: $e}';
+      yield {
+        'type': 'error',
+        'content': 'DeepSeek connection error: $e}'
+      };
     }
   }
 }
