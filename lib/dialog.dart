@@ -110,7 +110,7 @@ class _ChatScreenState extends State<ChatScreen> {
             color: Colors.grey[200],
             child: Center(
               child: Text(
-                _isDeepSeekModel(_selectedModel) ? 'DeepSeek API' : 'Zhipu AI API',
+                _isDeepSeekModel(_selectedModel) ? 'DeepSeek' : '智谱清言',
                 style: TextStyle(fontSize: 12, color: Colors.grey[700]),
               ),
             ),

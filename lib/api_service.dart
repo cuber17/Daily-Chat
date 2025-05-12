@@ -1,15 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 class AIService {
   // Zhipu AI API配置
   static const String zhipuApiUrl = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-  static const String zhipuApiKey = 'bc0f1f6ae22541558c5df849d128aaaf.RRJMNWUlzYbUEBFO';
+  static String zhipuApiKey = dotenv.env['ZHIPU_APIKEY']??'0';
 
   // DeepSeek API配置
   static const String deepseekApiUrl = 'https://api.deepseek.com/chat/completions';
-  static const String deepseekApiKey = 'sk-b3493c79407d48c58455eaef4a4f6673';
+  static String deepseekApiKey = dotenv.env['DEEPSEEK_APIKEY']??'0';
 
   // 映射DeepSeek模型名称
   static String _mapDeepSeekModel(String model) {
